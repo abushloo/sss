@@ -1,0 +1,108 @@
+name: Auto-Check Report & Code | الفحص التلقائي للتقرير
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  check-submission:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Report & Syntax Checker
+        run: |
+          python3 << 'EOF'
+          import os, re, ast, glob
+
+          readme_path = "README.md"
+          readme = ""
+          if os.path.exists(readme_path):
+              with open(readme_path, "r", encoding="utf-8") as f:
+                  readme = f.read()
+
+          score = 0.0
+          max_score = 2.0
+
+          # 1. Check Student Info (0.5)
+          info_ok = ("[Your Full Name]" not in readme) and ("[Your Student ID]" not in readme) and ("[Your Project Title]" not in readme)
+          s1 = 0.5 if info_ok else 0.0
+          score += s1
+
+          # 2. Check Problem & Logic (0.5)
+          logic_ok = ("[Write a short paragraph" not in readme) and ("[Explain what data" not in readme) and (len(readme.split()) > 120)
+          s2 = 0.5 if logic_ok else 0.0
+          score += s2
+
+          # 3. Check Vibe Coding Prompt Log (0.5)
+          prompt_ok = ("[Paste your prompt here]" not in readme) and ("## 3." in readme)
+          s3 = 0.5 if prompt_ok else 0.0
+          score += s3
+
+          # 4. Check Verification & Screenshot (0.5)
+          img_files = glob.glob("*.png") + glob.glob("*.jpg") + glob.glob("*.jpeg") + glob.glob("images/*.*")
+          verif_ok = ("[Verify one calculation" not in readme) and (len(img_files) > 0)
+          s4 = 0.5 if verif_ok else 0.0
+          score += s4
+
+          # Readiness Check (Unscored - For Instructor's 8 Marks)
+          py_files = [f for f in glob.glob("**/*.py", recursive=True)]
+          syntax_ok = False
+          syntax_msg_ar = "لم يتم العثور على أي ملف بايثون (.py) في المستودع."
+          syntax_msg_en = "No Python (.py) file found in the repository."
+
+          if py_files:
+              errors = []
+              for pf in py_files:
+                  try:
+                      with open(pf, "r", encoding="utf-8") as f:
+                          ast.parse(f.read(), filename=pf)
+                  except SyntaxError as e:
+                      errors.append(f"{pf} (Line {e.lineno}: {e.msg})")
+              if not errors:
+                  syntax_ok = True
+                  syntax_msg_ar = f"تم فحص ({len(py_files)}) ملف بايثون بنجاح ولا توجد أخطاء كتابية (Syntax Errors)."
+                  syntax_msg_en = f"Checked {len(py_files)} Python file(s) successfully with no syntax errors."
+              else:
+                  syntax_msg_ar = "يوجد خطأ برمجي (Syntax Error) في: " + ", ".join(errors)
+                  syntax_msg_en = "Syntax error found in: " + ", ".join(errors)
+
+          summary = f"""
+          # 📊 التقرير التلقائي لفحص المشروع (النسخة العربية)
+
+          > **درجة التقرير المبدئية:** `{score:.1f} / {max_score:.1f}`  
+          > *(ملاحظة: الـ 8 درجات المتبقية من إجمالي 10 درجات يتم تقييمها بواسطة أستاذ المقرر بناءً على جودة الكود والفهم الهندسي).*
+
+          | معيار فحص التقرير | الحالة | الدرجة | الملاحظة |
+          | :--- | :---: | :---: | :--- |
+          | **1. بيانات الطالب والمشروع** | {"✅" if info_ok else "❌"} | `{s1:.1f} / 0.5` | {"مكتملة." if info_ok else "يرجى استبدال النصوص الافتراضية باسمك ورقمك الجامعي وعنوان المشروع."} |
+          | **2. وصف المشكلة ومنطق الكود** | {"✅" if logic_ok else "❌"} | `{s2:.1f} / 0.5` | {"مكتمل." if logic_ok else "يرجى كتابة وصف المشكلة وشرح المدخلات والمعالجة والمخرجات."} |
+          | **3. سجل الـ Vibe Coding** | {"✅" if prompt_ok else "❌"} | `{s3:.1f} / 0.5` | {"مكتمل." if prompt_ok else "يرجى توثيق أمرين (Prompts) على الأقل داخل الجدول."} |
+          | **4. التحقق اليدوي ولقطة الشاشة** | {"✅" if verif_ok else "❌"} | `{s4:.1f} / 0.5` | {"مكتمل." if verif_ok else "يرجى كتابة التحقق اليدوي ورفع صورة نتائج التشغيل (.png أو .jpg)."} |
+
+          ### 🔍 فحص جاهزية الكود (إرشادي - بدون درجة)
+          * **حالة ملفات بايثون (`.py`):** {"✅" if syntax_ok else "⚠️"} {syntax_msg_ar}
+
+          ---
+
+          # 📊 Automated Project Check Report (English Version)
+
+          > **Estimated Report Score:** `{score:.1f} / {max_score:.1f}`  
+          > *(Note: The remaining 8 marks out of 10 will be graded by the instructor based on code quality and engineering understanding).*
+
+          | Report Criterion | Status | Score | Feedback |
+          | :--- | :---: | :---: | :--- |
+          | **1. Student & Project Info** | {"✅" if info_ok else "❌"} | `{s1:.1f} / 0.5` | {"Complete." if info_ok else "Please replace placeholders with your Name, ID, and Project Title."} |
+          | **2. Problem & Code Logic** | {"✅" if logic_ok else "❌"} | `{s2:.1f} / 0.5` | {"Complete." if logic_ok else "Please complete the problem description and logic sections."} |
+          | **3. Vibe Coding Prompt Log** | {"✅" if prompt_ok else "❌"} | `{s3:.1f} / 0.5` | {"Complete." if prompt_ok else "Please document at least 2 AI prompts in the table."} |
+          | **4. Verification & Screenshot** | {"✅" if verif_ok else "❌"} | `{s4:.1f} / 0.5` | {"Complete." if verif_ok else "Please add manual verification and upload an output screenshot (.png/.jpg)."} |
+
+          ### 🔍 Code Readiness Check (Advisory - Unscored)
+          * **Python File (`.py`) Status:** {"✅" if syntax_ok else "⚠️"} {syntax_msg_en}
+          """
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "w", encoding="utf-8") as f:
+              f.write(summary.strip())
+          EOF
